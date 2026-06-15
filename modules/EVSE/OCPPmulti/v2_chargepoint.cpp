@@ -3,9 +3,20 @@
 
 #include "v2_chargepoint.hpp"
 #include "generic_chargepoint_interface.hpp"
+#include "ocpp/v2/ctrlr_component_variables.hpp"
 #include "ocpp/v2/ocpp_enums.hpp"
 
 namespace {
+
+constexpr const auto CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME = "CentralContractValidationAllowed";
+constexpr const auto CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME = "ContractCertificateInstallationEnabled";
+constexpr const auto EV_CONNECTION_TIMEOUT_VAR_NAME = "EVConnectionTimeOut";
+constexpr const auto MASTER_PASS_GROUP_ID_VAR_NAME = "MasterPassGroupId";
+constexpr const auto PNC_ENABLED_VAR_NAME = "PnCEnabled";
+constexpr const auto SETPOINT_PRIORITY_VAR_NAME = "SetpointPriority";
+constexpr const auto TX_START_POINT_VAR_NAME = "TxStartPoint";
+constexpr const auto TX_STOP_POINT_VAR_NAME = "TxStopPoint";
+
 auto convert(ocpp::v2::ResetEnum value) {
     using ResetType = ocpp_multi::GenericChargePointCallbacks::ResetType;
     ResetType result{};
@@ -58,6 +69,41 @@ ChargePointV2::cb_remote_start_transaction(const ocpp::v2::RequestStartTransacti
     token.request_id = request.remoteStartId;
     m_callbacks_ptr->cb_provide_token(token);
     return ocpp::v2::RequestStartStopStatusEnum::Accepted;
+}
+
+std::optional<bool> ChargePointV2::get_bool(const ocpp::v2::Component& component_id,
+                                            const ocpp::v2::Variable& variable_id,
+                                            ocpp::v2::AttributeEnum attribute_enum) {
+    check_configured("get_bool");
+    const auto result = m_charge_point->request_value<bool>(component_id, variable_id, attribute_enum);
+    std::optional<bool> res;
+    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
+        res = result.value;
+    }
+    return res;
+}
+
+std::optional<std::int32_t> ChargePointV2::get_int32(const ocpp::v2::Component& component_id,
+                                                     const ocpp::v2::Variable& variable_id,
+                                                     ocpp::v2::AttributeEnum attribute_enum) {
+    check_configured("get_int32");
+    const auto result = m_charge_point->request_value<std::int32_t>(component_id, variable_id, attribute_enum);
+    std::optional<std::int32_t> res;
+    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
+        res = result.value;
+    }
+    return res;
+}
+std::optional<std::string> ChargePointV2::get_string(const ocpp::v2::Component& component_id,
+                                                     const ocpp::v2::Variable& variable_id,
+                                                     ocpp::v2::AttributeEnum attribute_enum) {
+    check_configured("get_string");
+    const auto result = m_charge_point->request_value<std::string>(component_id, variable_id, attribute_enum);
+    std::optional<std::string> res;
+    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
+        res = result.value;
+    }
+    return res;
 }
 
 ocpp::v2::Callbacks ChargePointV2::configure_callbacks() {
@@ -188,42 +234,41 @@ ChargePointV2::data_transfer_req(const ocpp::v2::DataTransferRequest& request) {
     return m_charge_point->data_transfer_req(request);
 }
 
-std::optional<bool> ChargePointV2::get_bool(const ocpp::v2::Component& component_id,
-                                            const ocpp::v2::Variable& variable_id,
-                                            ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_bool");
-    const auto result = m_charge_point->request_value<bool>(component_id, variable_id, attribute_enum);
-    std::optional<bool> res;
-    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
-        res = result.value;
-    }
-    return res;
+std::optional<bool> ChargePointV2::get_central_contract_validation_allowed() {
+    return get_bool(ocpp::v2::ControllerComponents::ISO15118Ctrlr, {CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME},
+                    ocpp::v2::AttributeEnum::Actual);
 }
-std::optional<std::int32_t> ChargePointV2::get_int32(const ocpp::v2::Component& component_id,
-                                                     const ocpp::v2::Variable& variable_id,
-                                                     ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_int32");
-    const auto result = m_charge_point->request_value<std::int32_t>(component_id, variable_id, attribute_enum);
-    std::optional<std::int32_t> res;
-    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
-        res = result.value;
-    }
-    return res;
+std::optional<bool> ChargePointV2::get_contract_certificate_installation_enabled() {
+    return get_bool(ocpp::v2::ControllerComponents::ISO15118Ctrlr, {CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME},
+                    ocpp::v2::AttributeEnum::Actual);
 }
-std::optional<std::string> ChargePointV2::get_string(const ocpp::v2::Component& component_id,
-                                                     const ocpp::v2::Variable& variable_id,
-                                                     ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_string");
-    const auto result = m_charge_point->request_value<std::string>(component_id, variable_id, attribute_enum);
-    std::optional<std::string> res;
-    if (result.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
-        res = result.value;
-    }
-    return res;
+std::optional<bool> ChargePointV2::get_pnc_enabled() {
+    return get_bool(ocpp::v2::ControllerComponents::ISO15118Ctrlr, {PNC_ENABLED_VAR_NAME},
+                    ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::int32_t> ChargePointV2::get_ev_connection_timeout() {
+    return get_int32(ocpp::v2::ControllerComponents::TxCtrlr, {EV_CONNECTION_TIMEOUT_VAR_NAME},
+                     ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointV2::get_setpoint_priority() {
+    return get_string(ocpp::v2::ControllerComponents::SmartChargingCtrlr, {SETPOINT_PRIORITY_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointV2::get_master_pass_group_id() {
+    return get_string(ocpp::v2::ControllerComponents::AuthCtrlr, {MASTER_PASS_GROUP_ID_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointV2::get_tx_start_point() {
+    return get_string(ocpp::v2::ControllerComponents::SmartChargingCtrlr, {TX_START_POINT_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointV2::get_tx_stop_point() {
+    return get_string(ocpp::v2::ControllerComponents::SmartChargingCtrlr, {TX_STOP_POINT_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
 }
 
 std::vector<ocpp::v2::EnhancedCompositeSchedule>
-ChargePointV2::get_all_composite_schedules(std::int32_t duration_s, const ocpp::v2::ChargingRateUnitEnum& unit) {
+ChargePointV2::get_all_composite_schedules(std::int32_t duration_s, ocpp::v2::ChargingRateUnitEnum unit) {
     check_configured("get_all_composite_schedules");
     return m_charge_point->get_all_composite_schedules(duration_s, unit);
 }
@@ -268,12 +313,13 @@ void ChargePointV2::on_faulted(std::int32_t evse_id, std::int32_t connector_id) 
     m_charge_point->on_faulted(evse_id, connector_id);
 }
 void ChargePointV2::on_firmware_update_status_notification(std::int32_t request_id,
-                                                           const ocpp::v2::FirmwareStatusEnum& firmware_update_status) {
+                                                           ocpp::v2::FirmwareStatusEnum firmware_update_status) {
     check_configured("on_firmware_update_status_notification");
     m_charge_point->on_firmware_update_status_notification(request_id, firmware_update_status);
 }
 ocpp::v2::Get15118EVCertificateResponse
-ChargePointV2::on_get_15118_ev_certificate_request(const ocpp::v2::Get15118EVCertificateRequest& request) {
+ChargePointV2::on_get_15118_ev_certificate_request(std::int32_t extensions_id,
+                                                   const ocpp::v2::Get15118EVCertificateRequest& request) {
     check_configured("on_get_15118_ev_certificate_request");
     return m_charge_point->on_get_15118_ev_certificate_request(request);
 }

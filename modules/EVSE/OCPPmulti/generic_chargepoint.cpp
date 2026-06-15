@@ -41,31 +41,40 @@ GenericChargePoint::data_transfer_req(const ocpp::v2::DataTransferRequest& reque
     return {};
 }
 
-template <typename T>
-std::optional<T> GenericChargePoint::get(const ocpp::v2::Component& component_id, const ocpp::v2::Variable& variable_id,
-                                         const ocpp::v2::AttributeEnum& attribute_enum) {
-    std::optional<T> result;
-    if (m_device_model) {
-        const auto res = m_device_model->request_value<T>(component_id, variable_id, attribute_enum);
-        if (res.status == ocpp::v2::GetVariableStatusEnum::Accepted) {
-            result = res.value;
-        }
-    }
-    return result;
+std::optional<bool> GenericChargePoint::get_central_contract_validation_allowed() {
+    return {};
 }
 
-template std::optional<bool> GenericChargePoint::get<bool>(const ocpp::v2::Component& component_id,
-                                                           const ocpp::v2::Variable& variable_id,
-                                                           const ocpp::v2::AttributeEnum& attribute_enum);
-template std::optional<std::int32_t>
-GenericChargePoint::get<std::int32_t>(const ocpp::v2::Component& component_id, const ocpp::v2::Variable& variable_id,
-                                      const ocpp::v2::AttributeEnum& attribute_enum);
-template std::optional<std::string> GenericChargePoint::get<std::string>(const ocpp::v2::Component& component_id,
-                                                                         const ocpp::v2::Variable& variable_id,
-                                                                         const ocpp::v2::AttributeEnum& attribute_enum);
+std::optional<bool> GenericChargePoint::get_contract_certificate_installation_enabled() {
+    return {};
+}
+
+std::optional<bool> GenericChargePoint::get_pnc_enabled() {
+    return {};
+}
+
+std::optional<std::int32_t> GenericChargePoint::get_ev_connection_timeout() {
+    return {};
+}
+
+std::optional<std::string> GenericChargePoint::get_setpoint_priority() {
+    return {};
+}
+
+std::optional<std::string> GenericChargePoint::get_master_pass_group_id() {
+    return {};
+}
+
+std::optional<std::string> GenericChargePoint::get_tx_start_point() {
+    return {};
+}
+
+std::optional<std::string> GenericChargePoint::get_tx_stop_point() {
+    return {};
+}
 
 std::vector<ocpp::v2::EnhancedCompositeSchedule>
-GenericChargePoint::get_all_composite_schedules(std::int32_t duration_s, const ocpp::v2::ChargingRateUnitEnum& unit) {
+GenericChargePoint::get_all_composite_schedules(std::int32_t duration_s, ocpp::v2::ChargingRateUnitEnum unit) {
     return {};
 }
 
@@ -103,12 +112,13 @@ void GenericChargePoint::on_fault_cleared(std::int32_t evse_id, std::int32_t con
 void GenericChargePoint::on_faulted(std::int32_t evse_id, std::int32_t connector_id) {
 }
 
-void GenericChargePoint::on_firmware_update_status_notification(
-    std::int32_t request_id, const ocpp::v2::FirmwareStatusEnum& firmware_update_status) {
+void GenericChargePoint::on_firmware_update_status_notification(std::int32_t request_id,
+                                                                ocpp::v2::FirmwareStatusEnum firmware_update_status) {
 }
 
 ocpp::v2::Get15118EVCertificateResponse
-GenericChargePoint::on_get_15118_ev_certificate_request(const ocpp::v2::Get15118EVCertificateRequest& request) {
+GenericChargePoint::on_get_15118_ev_certificate_request(std::int32_t extensions_id,
+                                                        const ocpp::v2::Get15118EVCertificateRequest& request) {
     return {};
 }
 

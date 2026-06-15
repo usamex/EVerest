@@ -14,6 +14,22 @@
 #include <type_traits>
 
 namespace {
+constexpr const auto CENTRAL_CONTRACT_VALIDATION_ALLOWED_COMPONENT_NAME = "ISO15118Ctrlr";
+constexpr const auto CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME = "CentralContractValidationAllowed";
+constexpr const auto CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_COMPONENT_NAME = "ISO15118Ctrlr";
+constexpr const auto CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME = "ContractCertificateInstallationEnabled";
+constexpr const auto EV_CONNECTION_TIMEOUT_COMPONENT_NAME = "TxCtrlr";
+constexpr const auto EV_CONNECTION_TIMEOUT_VAR_NAME = "EVConnectionTimeOut";
+constexpr const auto MASTER_PASS_GROUP_ID_COMPONENT_NAME = "AuthCtrlr";
+constexpr const auto MASTER_PASS_GROUP_ID_VAR_NAME = "MasterPassGroupId";
+constexpr const auto PNC_ENABLED_COMPONENT_NAME = "ISO15118Ctrlr";
+constexpr const auto PNC_ENABLED_VAR_NAME = "PnCEnabled";
+constexpr const auto SETPOINT_PRIORITY_COMPONENT_NAME = "SmartChargingCtrlr";
+constexpr const auto SETPOINT_PRIORITY_VAR_NAME = "SetpointPriority";
+constexpr const auto TX_START_POINT_COMPONENT_NAME = "SmartChargingCtrlr";
+constexpr const auto TX_START_POINT_VAR_NAME = "TxStartPoint";
+constexpr const auto TX_STOP_POINT_COMPONENT_NAME = "SmartChargingCtrlr";
+constexpr const auto TX_STOP_POINT_VAR_NAME = "TxStopPoint";
 
 inline std::string gen_key(const std::string& component_id, const std::string& variable_id,
                            const ocpp::v2::AttributeEnum& attribute_enum) {
@@ -114,6 +130,36 @@ std::optional<std::string> ChargePointStub::get_string(const ocpp::v2::Component
                                                        const ocpp::v2::Variable& variable_id,
                                                        ocpp::v2::AttributeEnum attribute_enum) {
     return store_get<std::string>(simple_store, component_id, variable_id, attribute_enum);
+}
+
+std::optional<bool> ChargePointStub::get_central_contract_validation_allowed() {
+    return get_bool({CENTRAL_CONTRACT_VALIDATION_ALLOWED_COMPONENT_NAME},
+                    {CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<bool> ChargePointStub::get_contract_certificate_installation_enabled() {
+    return get_bool({CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_COMPONENT_NAME},
+                    {CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<bool> ChargePointStub::get_pnc_enabled() {
+    return get_bool({PNC_ENABLED_COMPONENT_NAME}, {PNC_ENABLED_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::int32_t> ChargePointStub::get_ev_connection_timeout() {
+    return get_int32({EV_CONNECTION_TIMEOUT_COMPONENT_NAME}, {EV_CONNECTION_TIMEOUT_VAR_NAME},
+                     ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointStub::get_setpoint_priority() {
+    return get_string({SETPOINT_PRIORITY_COMPONENT_NAME}, {SETPOINT_PRIORITY_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointStub::get_master_pass_group_id() {
+    return get_string({MASTER_PASS_GROUP_ID_COMPONENT_NAME}, {MASTER_PASS_GROUP_ID_VAR_NAME},
+                      ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointStub::get_tx_start_point() {
+    return get_string({TX_START_POINT_COMPONENT_NAME}, {TX_START_POINT_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+}
+std::optional<std::string> ChargePointStub::get_tx_stop_point() {
+    return get_string({TX_STOP_POINT_COMPONENT_NAME}, {TX_STOP_POINT_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
 }
 
 } // namespace stubs

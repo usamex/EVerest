@@ -20,6 +20,22 @@ namespace fs = std::filesystem;
 
 namespace {
 
+constexpr const auto SQL_CORE_MIGRATIONS = "core_migrations";
+
+// OCPP 2.0.1 specific configuration variable names
+constexpr const auto CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME = "CentralContractValidationAllowed";
+constexpr const auto CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME = "ContractCertificateInstallationEnabled";
+constexpr const auto EV_CONNECTION_TIMEOUT_VAR_NAME = "EVConnectionTimeOut";
+constexpr const auto MASTER_PASS_GROUP_ID_VAR_NAME = "MasterPassGroupId";
+constexpr const auto PNC_ENABLED_VAR_NAME = "PnCEnabled";
+constexpr const auto SETPOINT_PRIORITY_VAR_NAME = "SetpointPriority";
+constexpr const auto SETPOINT_SOURCE = "OCPP";
+constexpr const auto TX_START_POINT_VAR_NAME = "TxStartPoint";
+constexpr const auto TX_STOP_POINT_VAR_NAME = "TxStopPoint";
+
+constexpr std::int32_t LOWEST_SETPOINT_PRIORITY = 1000;
+constexpr std::int32_t HIGHEST_SETPOINT_PRIORITY = 0;
+
 std::optional<ocpp::v2::IdToken> get_authorised_id_token(const types::evse_manager::SessionEvent& session_event) {
     using namespace module::conversions;
 
@@ -258,56 +274,6 @@ ocpp::v2::TriggerReasonEnum stop_reason_to_trigger_reason_enum(const ocpp::v2::R
     }
 }
 
-#if 0
-types::ocpp::KeyValue to_everest(const ocpp::v16::KeyValue& key_value) {
-    types::ocpp::KeyValue _key_value;
-    _key_value.key = key_value.key.get();
-    _key_value.read_only = key_value.readonly;
-    if (key_value.value.has_value()) {
-        _key_value.value = key_value.value.value().get();
-    }
-    return _key_value;
-}
-
-types::ocpp::ConfigurationStatus to_everest(const ocpp::v16::ConfigurationStatus status) {
-    switch (status) {
-    case ocpp::v16::ConfigurationStatus::Accepted:
-        return types::ocpp::ConfigurationStatus::Accepted;
-    case ocpp::v16::ConfigurationStatus::Rejected:
-        return types::ocpp::ConfigurationStatus::Rejected;
-    case ocpp::v16::ConfigurationStatus::RebootRequired:
-        return types::ocpp::ConfigurationStatus::RebootRequired;
-    case ocpp::v16::ConfigurationStatus::NotSupported:
-        return types::ocpp::ConfigurationStatus::NotSupported;
-    default:
-        EVLOG_warning << "Could not convert to ConfigurationStatus";
-        return types::ocpp::ConfigurationStatus::Rejected;
-    }
-}
-
-types::ocpp::GetConfigurationResponse to_everest(const ocpp::v16::GetConfigurationResponse& response) {
-    types::ocpp::GetConfigurationResponse _response;
-    std::vector<types::ocpp::KeyValue> configuration_keys;
-    std::vector<std::string> unknown_keys;
-
-    if (response.configurationKey.has_value()) {
-        for (const auto& item : response.configurationKey.value()) {
-            configuration_keys.push_back(to_everest(item));
-        }
-    }
-
-    if (response.unknownKey.has_value()) {
-        for (const auto& item : response.unknownKey.value()) {
-            unknown_keys.push_back(item.get());
-        }
-    }
-
-    _response.configuration_keys = configuration_keys;
-    _response.unknown_keys = unknown_keys;
-    return _response;
-}
-#endif
-
 void update_evcc_id_token(ocpp::v2::IdToken& id_token, const std::string& evcc_id,
                           const ocpp::OcppProtocolVersion ocpp_protocol_version) {
     if (ocpp_protocol_version == ocpp::OcppProtocolVersion::v21) {
@@ -327,22 +293,6 @@ void update_evcc_id_token(ocpp::v2::IdToken& id_token, const std::string& evcc_i
         }
     }
 }
-
-constexpr const auto SQL_CORE_MIGRATIONS = "core_migrations";
-
-// OCPP 2.0.1 specific configuration variable names
-constexpr const auto CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME = "CentralContractValidationAllowed";
-constexpr const auto CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME = "ContractCertificateInstallationEnabled";
-constexpr const auto EV_CONNECTION_TIMEOUT_VAR_NAME = "EVConnectionTimeOut";
-constexpr const auto MASTER_PASS_GROUP_ID_VAR_NAME = "MasterPassGroupId";
-constexpr const auto PNC_ENABLED_VAR_NAME = "PnCEnabled";
-constexpr const auto SETPOINT_PRIORITY_VAR_NAME = "SetpointPriority";
-constexpr const auto SETPOINT_SOURCE = "OCPP";
-constexpr const auto TX_START_POINT_VAR_NAME = "TxStartPoint";
-constexpr const auto TX_STOP_POINT_VAR_NAME = "TxStopPoint";
-
-constexpr std::int32_t LOWEST_SETPOINT_PRIORITY = 1000;
-constexpr std::int32_t HIGHEST_SETPOINT_PRIORITY = 0;
 
 } // namespace
 
@@ -796,35 +746,26 @@ void GenericOcpp::ready_event_queue() {
 }
 
 void GenericOcpp::ready_module_configuration() {
-    const auto ev_connection_timeout =
-        m_charge_point.get_int32(ocpp::v2::ControllerComponents::TxCtrlr,
-                                 ocpp::v2::Variable{EV_CONNECTION_TIMEOUT_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto ev_connection_timeout = m_charge_point.get_ev_connection_timeout();
     if (ev_connection_timeout) {
         m_requires.auth.call_set_connection_timeout(ev_connection_timeout.value());
     }
 
-    const auto master_pass_group_id =
-        m_charge_point.get_string(ocpp::v2::ControllerComponents::AuthCtrlr,
-                                  ocpp::v2::Variable{MASTER_PASS_GROUP_ID_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto master_pass_group_id = m_charge_point.get_master_pass_group_id();
     if (master_pass_group_id) {
         m_requires.auth.call_set_master_pass_group_id(master_pass_group_id.value());
     }
 
     types::evse_manager::PlugAndChargeConfiguration pnc_config;
 
-    const auto iso15118_pnc_enabled =
-        m_charge_point.get_bool(ocpp::v2::ControllerComponents::ISO15118Ctrlr, ocpp::v2::Variable{PNC_ENABLED_VAR_NAME},
-                                ocpp::v2::AttributeEnum::Actual);
+    const auto iso15118_pnc_enabled = m_charge_point.get_pnc_enabled();
     pnc_config.pnc_enabled = iso15118_pnc_enabled;
 
-    const auto central_contract_validation_allowed = m_charge_point.get_bool(
-        ocpp::v2::ControllerComponents::ISO15118Ctrlr, ocpp::v2::Variable{CENTRAL_CONTRACT_VALIDATION_ALLOWED_VAR_NAME},
-        ocpp::v2::AttributeEnum::Actual);
+    const auto central_contract_validation_allowed = m_charge_point.get_central_contract_validation_allowed();
     pnc_config.central_contract_validation_allowed = central_contract_validation_allowed;
 
-    const auto contract_certificate_installation_enabled = m_charge_point.get_bool(
-        ocpp::v2::ControllerComponents::ISO15118Ctrlr,
-        ocpp::v2::Variable{CONTRACT_CERTIFICATE_INSTALLATION_ENABLED_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto contract_certificate_installation_enabled =
+        m_charge_point.get_contract_certificate_installation_enabled();
     pnc_config.contract_certificate_installation_enabled = contract_certificate_installation_enabled;
 
     for (const auto& evse_manager : m_requires.evse_manager) {
@@ -836,8 +777,7 @@ void GenericOcpp::ready_transaction_handler() {
     std::set<module::TxStartStopPoint> tx_start_points;
     std::set<module::TxStartStopPoint> tx_stop_points;
 
-    const auto tx_start_point_request_value = m_charge_point.get_string(
-        ocpp::v2::Component{"TxCtrlr"}, ocpp::v2::Variable{TX_START_POINT_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto tx_start_point_request_value = m_charge_point.get_tx_start_point();
     if (tx_start_point_request_value) {
         auto tx_start_point_csl =
             tx_start_point_request_value.value(); // contains comma seperated list of TxStartPoints
@@ -849,8 +789,7 @@ void GenericOcpp::ready_transaction_handler() {
         tx_start_points = {module::TxStartStopPoint::PowerPathClosed};
     }
 
-    const auto tx_stop_point_request_value = m_charge_point.get_string(
-        ocpp::v2::Component{"TxCtrlr"}, ocpp::v2::Variable{TX_STOP_POINT_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto tx_stop_point_request_value = m_charge_point.get_tx_stop_point();
     if (tx_stop_point_request_value) {
         auto tx_stop_point_csl = tx_stop_point_request_value.value(); // contains comma seperated list of TxStartPoints
         tx_stop_points = get_tx_start_stop_points(tx_stop_point_csl);
@@ -1179,7 +1118,7 @@ void GenericOcpp::cb_iso15118_certificate_request(std::int32_t extensions_id,
 
     if (m_started) {
         auto ocpp_response = m_charge_point.on_get_15118_ev_certificate_request(
-            to_ocpp_get_15118_certificate_request(certificate_request));
+            extensions_id, to_ocpp_get_15118_certificate_request(certificate_request));
         EVLOG_debug << "Received response from get_15118_ev_certificate_request: " << ocpp_response;
         // transform response, inject action, send to associated EvseManager
         types::iso15118::ResponseExiStreamStatus everest_response;
@@ -1884,61 +1823,48 @@ void GenericOcpp::process_session_event(std::int32_t evse_id, const types::evse_
     const auto connector_id = session_event.connector_id.value_or(1);
     std::lock_guard<std::mutex> lg(m_session_event_mutex);
     switch (session_event.event) {
-    case types::evse_manager::SessionEventEnum::SessionStarted: {
+    case types::evse_manager::SessionEventEnum::SessionStarted:
         process_session_started(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::SessionFinished: {
+    case types::evse_manager::SessionEventEnum::SessionFinished:
         process_session_finished(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::TransactionStarted: {
+    case types::evse_manager::SessionEventEnum::TransactionStarted:
         process_transaction_started(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::TransactionFinished: {
+    case types::evse_manager::SessionEventEnum::TransactionFinished:
         process_transaction_finished(evse_id, connector_id, session_event);
         break;
-    }
     case types::evse_manager::SessionEventEnum::SessionResumed:
         process_session_resumed(evse_id, connector_id, session_event);
         break;
-    case types::evse_manager::SessionEventEnum::ChargingStarted: {
+    case types::evse_manager::SessionEventEnum::ChargingStarted:
         process_charging_started(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::ChargingPausedEV: {
+    case types::evse_manager::SessionEventEnum::ChargingPausedEV:
         process_charging_paused_ev(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::ChargingPausedEVSE: {
+    case types::evse_manager::SessionEventEnum::ChargingPausedEVSE:
         process_charging_paused_evse(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::Disabled: {
+    case types::evse_manager::SessionEventEnum::Disabled:
         process_disabled(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::Enabled: {
+    case types::evse_manager::SessionEventEnum::Enabled:
         process_enabled(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::Authorized: {
+    case types::evse_manager::SessionEventEnum::Authorized:
         process_authorised(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::Deauthorized: {
+    case types::evse_manager::SessionEventEnum::Deauthorized:
         process_deauthorised(evse_id, connector_id, session_event);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::ReservationStart: {
+    case types::evse_manager::SessionEventEnum::ReservationStart:
         process_reserved(evse_id, connector_id);
         break;
-    }
-    case types::evse_manager::SessionEventEnum::ReservationEnd: {
+    case types::evse_manager::SessionEventEnum::ReservationEnd:
         process_reservation_end(evse_id, connector_id);
         break;
-    }
     // explicitly ignore the following session events for now
     // TODO(kai): implement
     case types::evse_manager::SessionEventEnum::AuthRequired:
@@ -2239,9 +2165,7 @@ void GenericOcpp::set_external_limits(const std::vector<ocpp::v2::EnhancedCompos
     };
 
     std::int32_t setpoint_priority = LOWEST_SETPOINT_PRIORITY;
-    const auto resp =
-        m_charge_point.get_string(ocpp::v2::ControllerComponents::SmartChargingCtrlr,
-                                  ocpp::v2::Variable{SETPOINT_PRIORITY_VAR_NAME}, ocpp::v2::AttributeEnum::Actual);
+    const auto resp = m_charge_point.get_setpoint_priority();
 
     if (resp) {
         setpoint_priority = resp.value() == "CSMS" ? HIGHEST_SETPOINT_PRIORITY : LOWEST_SETPOINT_PRIORITY;

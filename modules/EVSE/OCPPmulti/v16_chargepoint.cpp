@@ -4,12 +4,16 @@
 #include "v16_chargepoint.hpp"
 #include "generic_chargepoint_interface.hpp"
 #include "ocpp/common/types.hpp"
+#include "ocpp/v16/messages/ChangeAvailability.hpp"
+#include "ocpp/v16/messages/GetConfiguration.hpp"
 #include "ocpp/v16/ocpp_enums.hpp"
 #include "ocpp/v16/types.hpp"
 #include "ocpp/v2/messages/TransactionEvent.hpp"
 #include "ocpp/v2/messages/UpdateFirmware.hpp"
 #include "ocpp/v2/ocpp_enums.hpp"
 #include "ocpp/v2/ocpp_types.hpp"
+#include "ocpp/v2/types.hpp"
+#include <type_traits>
 
 namespace {
 
@@ -23,6 +27,8 @@ constexpr const auto CONNECTION_TIMEOUT_VARIABLE = "EVConnectionTimeOut";
 constexpr const auto ISO15118_PNC_ENABLED_CONFIG_KEY = "ISO15118PnCEnabled";
 constexpr const auto ISO15118_PNC_ENABLED_COMPONENT = "ISO15118Ctrlr";
 constexpr const auto ISO15118_PNC_ENABLED_VARIABLE = "PnCEnabled";
+
+constexpr const auto SWITCHING_PHASES_REASON = "SwitchingPhases";
 
 void create_empty_user_config(const fs::path& user_config_path) {
     if (fs::exists(user_config_path.parent_path())) {
@@ -56,6 +62,23 @@ auto convert(ocpp::v16::AuthorizationStatus value) {
         break;
     default:
         result = ocpp::v2::AuthorizationStatusEnum::Unknown;
+        break;
+    }
+    return result;
+}
+
+auto convert(ocpp::v16::AvailabilityStatus value) {
+    ocpp::v2::ChangeAvailabilityStatusEnum result{};
+    switch (value) {
+    case ocpp::v16::AvailabilityStatus::Accepted:
+        result = ocpp::v2::ChangeAvailabilityStatusEnum::Accepted;
+        break;
+    case ocpp::v16::AvailabilityStatus::Scheduled:
+        result = ocpp::v2::ChangeAvailabilityStatusEnum::Scheduled;
+        break;
+    case ocpp::v16::AvailabilityStatus::Rejected:
+    default:
+        result = ocpp::v2::ChangeAvailabilityStatusEnum::Rejected;
         break;
     }
     return result;
@@ -115,6 +138,34 @@ auto convert(ocpp::v2::BootReasonEnum value) {
     return result;
 }
 
+auto convert(ocpp::v2::ChargingRateUnitEnum value) {
+    ocpp::v16::ChargingRateUnit result{};
+    switch (value) {
+    case ocpp::v2::ChargingRateUnitEnum::W:
+        result = ocpp::v16::ChargingRateUnit::W;
+        break;
+    case ocpp::v2::ChargingRateUnitEnum::A:
+    default:
+        result = ocpp::v16::ChargingRateUnit::A;
+        break;
+    }
+    return result;
+}
+
+auto convert(ocpp::v16::ChargingRateUnit value) {
+    ocpp::v2::ChargingRateUnitEnum result{};
+    switch (value) {
+    case ocpp::v16::ChargingRateUnit::W:
+        result = ocpp::v2::ChargingRateUnitEnum::W;
+        break;
+    case ocpp::v16::ChargingRateUnit::A:
+    default:
+        result = ocpp::v2::ChargingRateUnitEnum::A;
+        break;
+    }
+    return result;
+}
+
 auto convert(const ocpp::v16::DataTransferRequest& value) {
     ocpp::v2::DataTransferRequest result{};
     result.vendorId = value.vendorId;
@@ -140,6 +191,99 @@ auto convert(const ocpp::v2::DataTransferResponse& value) {
         break;
     }
     result.data = value.data;
+    return result;
+}
+
+auto convert(ocpp::v16::DataTransferStatus value) {
+    ocpp::v2::DataTransferStatusEnum result{};
+
+    switch (value) {
+    case ocpp::v16::DataTransferStatus::Accepted:
+        result = ocpp::v2::DataTransferStatusEnum::Accepted;
+        break;
+    case ocpp::v16::DataTransferStatus::UnknownMessageId:
+        result = ocpp::v2::DataTransferStatusEnum::UnknownMessageId;
+        break;
+    case ocpp::v16::DataTransferStatus::UnknownVendorId:
+        result = ocpp::v2::DataTransferStatusEnum::UnknownVendorId;
+        break;
+    case ocpp::v16::DataTransferStatus::Rejected:
+    default:
+        result = ocpp::v2::DataTransferStatusEnum::Rejected;
+        break;
+    }
+
+    return result;
+}
+
+auto convert(const ocpp::v16::EnhancedChargingSchedulePeriod& value) {
+    ocpp::v2::EnhancedChargingSchedulePeriod result;
+    result.startPeriod = value.startPeriod;
+    result.limit = value.limit;
+    result.stackLevel = value.stackLevel;
+    // TODO(james-ctc): periodTransformed need handling
+    return result;
+}
+
+auto convert(const ocpp::v16::EnhancedChargingSchedule& value) {
+    ocpp::v2::EnhancedCompositeSchedule result;
+    result.chargingRateUnit = convert(value.chargingRateUnit);
+    for (const auto& item : value.chargingSchedulePeriod) {
+        result.chargingSchedulePeriod.push_back(convert(item));
+    }
+    result.duration = value.duration.value_or(0);
+    result.scheduleStart = value.startSchedule.value_or(ocpp::DateTime{});
+    // TODO(james-ctc): minChargingRate need handling
+    return result;
+}
+
+auto convert(ocpp::v2::FirmwareStatusEnum value) {
+    ocpp::FirmwareStatusNotification result{};
+    switch (value) {
+    case ocpp::v2::FirmwareStatusEnum::Downloaded:
+        result = ocpp::FirmwareStatusNotification::Downloaded;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::DownloadFailed:
+        result = ocpp::FirmwareStatusNotification::DownloadFailed;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::Downloading:
+        result = ocpp::FirmwareStatusNotification::Downloading;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::DownloadScheduled:
+        result = ocpp::FirmwareStatusNotification::DownloadScheduled;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::DownloadPaused:
+        result = ocpp::FirmwareStatusNotification::DownloadPaused;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::Idle:
+        result = ocpp::FirmwareStatusNotification::Idle;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::Installing:
+        result = ocpp::FirmwareStatusNotification::Installing;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::Installed:
+        result = ocpp::FirmwareStatusNotification::Installed;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::InstallRebooting:
+        result = ocpp::FirmwareStatusNotification::InstallRebooting;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::InstallScheduled:
+        result = ocpp::FirmwareStatusNotification::InstallScheduled;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::InstallVerificationFailed:
+        result = ocpp::FirmwareStatusNotification::InstallVerificationFailed;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::InvalidSignature:
+        result = ocpp::FirmwareStatusNotification::InvalidSignature;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::SignatureVerified:
+        result = ocpp::FirmwareStatusNotification::SignatureVerified;
+        break;
+    case ocpp::v2::FirmwareStatusEnum::InstallationFailed:
+    default:
+        result = ocpp::FirmwareStatusNotification::InstallationFailed;
+        break;
+    }
     return result;
 }
 
@@ -172,6 +316,20 @@ auto convert(ocpp::v16::LogEnumType value) {
     case ocpp::v16::LogEnumType::DiagnosticsLog:
     default:
         result = ocpp::v2::LogEnum::DiagnosticsLog;
+        break;
+    }
+    return result;
+}
+
+auto convert(ocpp::v2::OperationalStatusEnum value) {
+    ocpp::v16::AvailabilityType result{};
+    switch (value) {
+    case ocpp::v2::OperationalStatusEnum::Operative:
+        result = ocpp::v16::AvailabilityType::Operative;
+        break;
+    case ocpp::v2::OperationalStatusEnum::Inoperative:
+    default:
+        result = ocpp::v16::AvailabilityType::Inoperative;
         break;
     }
     return result;
@@ -336,6 +494,23 @@ auto convert(const ocpp::v2::UpdateFirmwareResponse& value) {
     default:
         result = ocpp::v16::UpdateFirmwareStatusEnumType::Rejected;
         break;
+    }
+    return result;
+}
+
+template <typename T> std::optional<T> get(ocpp::v16::ChargePoint& charge_point, const std::string_view& variable) {
+    std::optional<T> result;
+    ocpp::v16::GetConfigurationRequest request;
+    request.key = {ocpp::CiString<50>{std::string{variable}}};
+    const auto response = charge_point.get_configuration_key(request);
+    if (response.configurationKey) {
+        for (const auto& key_value : response.configurationKey.value()) {
+            if (static_cast<std::string>(key_value.key) == variable) {
+                if (key_value.value) {
+                    result = ocpp::v2::to_specific_type<T>(key_value.value.value());
+                }
+            }
+        }
     }
     return result;
 }
@@ -752,70 +927,156 @@ void ChargePointV16::stop() {
 std::optional<ocpp::v2::DataTransferResponse>
 ChargePointV16::data_transfer_req(const ocpp::v2::DataTransferRequest& request) {
     check_configured("data_transfer_req");
+    const auto res = m_charge_point->data_transfer(request.vendorId, request.messageId, request.data);
+    std::optional<ocpp::v2::DataTransferResponse> result;
+    if (res) {
+        ocpp::v2::DataTransferResponse response;
+        response.status = convert(res.value().status);
+        response.data = res.value().data;
+    }
 }
 
-std::optional<bool> ChargePointV16::get_bool(const ocpp::v2::Component& component_id,
-                                             const ocpp::v2::Variable& variable_id,
-                                             ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_bool");
+std::optional<bool> ChargePointV16::get_central_contract_validation_allowed() {
+    check_configured("get_central_contract_validation_allowed");
+    return get<bool>(*m_charge_point, "CentralContractValidationAllowed");
 }
-std::optional<std::int32_t> ChargePointV16::get_int32(const ocpp::v2::Component& component_id,
-                                                      const ocpp::v2::Variable& variable_id,
-                                                      ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_int32");
+
+std::optional<bool> ChargePointV16::get_contract_certificate_installation_enabled() {
+    return {};
 }
-std::optional<std::string> ChargePointV16::get_string(const ocpp::v2::Component& component_id,
-                                                      const ocpp::v2::Variable& variable_id,
-                                                      ocpp::v2::AttributeEnum attribute_enum) {
-    check_configured("get_string");
+
+std::optional<bool> ChargePointV16::get_pnc_enabled() {
+    check_configured("get_pnc_enabled");
+    return get<bool>(*m_charge_point, "ISO15118PnCEnabled");
+}
+
+std::optional<std::int32_t> ChargePointV16::get_ev_connection_timeout() {
+    check_configured("get_ev_connection_timeout");
+    return get<std::int32_t>(*m_charge_point, "ConnectionTimeout");
+}
+
+std::optional<std::string> ChargePointV16::get_setpoint_priority() {
+    return {};
+}
+
+std::optional<std::string> ChargePointV16::get_master_pass_group_id() {
+    return {};
+}
+
+std::optional<std::string> ChargePointV16::get_tx_start_point() {
+    return {};
+}
+
+std::optional<std::string> ChargePointV16::get_tx_stop_point() {
+    return {};
 }
 
 std::vector<ocpp::v2::EnhancedCompositeSchedule>
-ChargePointV16::get_all_composite_schedules(std::int32_t duration_s, const ocpp::v2::ChargingRateUnitEnum& unit) {
+ChargePointV16::get_all_composite_schedules(std::int32_t duration_s, ocpp::v2::ChargingRateUnitEnum unit) {
     check_configured("get_all_composite_schedules");
+    const auto res = m_charge_point->get_all_enhanced_composite_charging_schedules(duration_s, convert(unit));
+    std::vector<ocpp::v2::EnhancedCompositeSchedule> result;
+    result.reserve(res.size());
+    for (const auto& entry : res) {
+        result.push_back(convert(entry.second));
+    }
+    return result;
 }
+
 std::vector<ocpp::v2::GetVariableResult>
 ChargePointV16::get_variables(const std::vector<ocpp::v2::GetVariableData>& get_variable_data_vector) {
     check_configured("get_variables");
+    // TODO(james-ctc): problematic
 }
 
 void ChargePointV16::on_authorized(std::int32_t evse_id, std::int32_t connector_id, const ocpp::v2::IdToken& id_token) {
-    check_configured("on_authorized");
+    // not used in OCPP 1.6
 }
+
 ocpp::v2::ChangeAvailabilityResponse
 ChargePointV16::on_change_availability(const ocpp::v2::ChangeAvailabilityRequest& request) {
     check_configured("on_change_availability");
+    ocpp::v16::ChangeAvailabilityRequest req;
+    req.connectorId = request.evse.value_or(ocpp::v2::EVSE{0, 0}).id;
+    req.type = convert(request.operationalStatus);
+    const auto res = m_charge_point->on_change_availability(req);
+    ocpp::v2::ChangeAvailabilityResponse result;
+    result.status = convert(res.status);
+    return result;
 }
+
 bool ChargePointV16::on_charging_state_changed(std::uint32_t evse_id, ocpp::v2::ChargingStateEnum charging_state,
                                                ocpp::v2::TriggerReasonEnum trigger_reason) {
     check_configured("on_charging_state_changed");
+    bool result{false};
+    switch (charging_state) {
+    case ocpp::v2::ChargingStateEnum::Charging:
+        m_charge_point->on_resume_charging(evse_id);
+        result = true;
+        break;
+
+    case ocpp::v2::ChargingStateEnum::SuspendedEV:
+        m_charge_point->on_suspend_charging_ev(evse_id);
+        result = true;
+        break;
+
+    case ocpp::v2::ChargingStateEnum::SuspendedEVSE:
+        m_charge_point->on_suspend_charging_evse(evse_id);
+        result = true;
+        break;
+
+    case ocpp::v2::ChargingStateEnum::EVConnected:
+    case ocpp::v2::ChargingStateEnum::Idle:
+    default:
+        break;
+    }
+    return result;
 }
+
 void ChargePointV16::on_enabled(std::int32_t evse_id, std::int32_t connector_id) {
     check_configured("on_enabled");
+    m_charge_point->on_enabled(evse_id);
 }
+
 void ChargePointV16::on_ev_charging_needs(const ocpp::v2::NotifyEVChargingNeedsRequest& request) {
-    check_configured("on_ev_charging_needs");
+    // not used in OCPP 1.6
 }
+
 void ChargePointV16::on_event(const std::vector<ocpp::v2::EventData>& events) {
-    check_configured("on_event");
+    // not used in OCPP 1.6
 }
+
 void ChargePointV16::on_fault_cleared(std::int32_t evse_id, std::int32_t connector_id) {
-    check_configured("on_fault_cleared");
+    // not used in OCPP 1.6
 }
+
 void ChargePointV16::on_faulted(std::int32_t evse_id, std::int32_t connector_id) {
-    check_configured("on_faulted");
+    // not used in OCPP 1.6
 }
-void ChargePointV16::on_firmware_update_status_notification(
-    std::int32_t request_id, const ocpp::v2::FirmwareStatusEnum& firmware_update_status) {
+
+void ChargePointV16::on_firmware_update_status_notification(std::int32_t request_id,
+                                                            ocpp::v2::FirmwareStatusEnum firmware_update_status) {
     check_configured("on_firmware_update_status_notification");
+    m_charge_point->on_firmware_update_status_notification(request_id, convert(firmware_update_status));
 }
+
 ocpp::v2::Get15118EVCertificateResponse
-ChargePointV16::on_get_15118_ev_certificate_request(const ocpp::v2::Get15118EVCertificateRequest& request) {
+ChargePointV16::on_get_15118_ev_certificate_request(std::int32_t extensions_id,
+                                                    const ocpp::v2::Get15118EVCertificateRequest& request) {
     check_configured("on_get_15118_ev_certificate_request");
+    m_charge_point->data_transfer_pnc_get_15118_ev_certificate(extensions_id, request.exiRequest,
+                                                               request.iso15118SchemaVersion, request.action);
+    // TODO(james-ctc): response need handling
+    return {};
 }
+
 void ChargePointV16::on_log_status_notification(ocpp::v2::UploadLogStatusEnum status, std::int32_t requestId) {
     check_configured("on_log_status_notification");
+    // the enum and strings for OCPP 1.6 are the same as OCPP 2.x
+    m_charge_point->on_log_status_notification(requestId,
+                                               ocpp::v2::conversions::upload_log_status_enum_to_string(status));
 }
+
 void ChargePointV16::on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) {
     check_configured("on_meter_value");
 }

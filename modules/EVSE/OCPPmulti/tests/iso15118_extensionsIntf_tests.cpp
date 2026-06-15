@@ -49,7 +49,7 @@ TEST_F(GenericOcppRequiresTester, callSetGetCertificateResponse) {
     // std::optional<std::int32_t> remainingContracts;
     // std::optional<CustomData> customData;
 
-    EXPECT_CALL(chargepoint, on_get_15118_ev_certificate_request(_)).WillOnce(Return(response));
+    EXPECT_CALL(chargepoint, on_get_15118_ev_certificate_request(0, _)).WillOnce(Return(response));
 
     ocpp.cb_iso15118_certificate_request(0, certificate_request);
 
