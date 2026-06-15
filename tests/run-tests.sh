@@ -8,7 +8,7 @@ set -euo pipefail
 # Suites:
 #   all             All tests
 #
-#   integration     Core, framework, and async API tests
+#   integration     Core, framework, async API, and EEBUS tests
 #   core            Core tests only
 #   framework       Framework tests only
 #   asyncapi        Async API tests only
@@ -166,7 +166,8 @@ case "$SUITE" in
             --junitxml="$JUNITXML" --html="$HTML" \
             core_tests/*.py \
             framework_tests/*.py \
-            async_api_tests/*.py
+            async_api_tests/*.py \
+            eebus_tests/eebus_tests.py
         ;;
 
     core)
