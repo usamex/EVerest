@@ -12,6 +12,7 @@
 #include <charge_bridge/heartbeat_service.hpp>
 #include <charge_bridge/plc_bridge.hpp>
 #include <charge_bridge/serial_bridge.hpp>
+#include <charge_bridge/utilities/print_status.hpp>
 #include <charge_bridge/utilities/symlink.hpp>
 #include <everest/io/event/fd_event_handler.hpp>
 #include <everest/io/mqtt/mosquitto_cpp.hpp>
@@ -85,7 +86,8 @@ private:
     bool unregister_internal_events(everest::lib::io::event::fd_event_handler& handler);
     bool register_manage_events(everest::lib::io::event::fd_event_handler& handler);
     bool unregister_manage_events(everest::lib::io::event::fd_event_handler& handler);
-
+    void publish_status(utilities::chargebridge_status const& status);
+    utilities::chargebridge_status get_status();
 private:
     std::unique_ptr<can_bridge> m_can_0_client;
     std::unique_ptr<serial_bridge> m_pty_1;

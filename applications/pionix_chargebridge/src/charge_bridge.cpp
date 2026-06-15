@@ -8,6 +8,7 @@
 #include <charge_bridge/heartbeat_service.hpp>
 #include <charge_bridge/utilities/logging.hpp>
 #include <charge_bridge/utilities/print_config.hpp>
+#include <charge_bridge/utilities/print_status.hpp>
 #include <charge_bridge/utilities/string.hpp>
 #include <charge_bridge/utilities/sync_udp_client.hpp>
 #include <everest/io/event/fd_event_sync_interface.hpp>
@@ -144,13 +145,13 @@ void charge_bridge::init() {
                     auto handle = m_cb_status.handle();
                     handle->is_connected = connected;
                 }
-                if(m_plc){
+                if (m_plc) {
                     m_plc->set_cb_connection_status(connected);
                 }
-                if(m_gpio){
+                if (m_gpio) {
                     m_gpio->set_cb_connection_status(connected);
                 }
-                if(m_can_0_client){
+                if (m_can_0_client) {
                     m_can_0_client->set_cb_connection_status(connected);
                 }
 
@@ -277,12 +278,69 @@ std::string charge_bridge::get_pty_3_slave_path() {
     return "";
 }
 
+utilities::chargebridge_status charge_bridge::get_status() {
+    utilities::chargebridge_status status;
+
+    status.cb_name = m_config.cb_name;
+    {
+        auto handle = m_cb_status.handle();
+        status.connected = handle->is_connected;
+        status.discovered = not handle->discovery_pending;
+    }
+
+    if (m_can_0_client) {
+        auto available = m_can_0_client->available();
+        status.can0.emplace(available);
+    }
+    if (m_pty_1) {
+        auto available = m_pty_1->available();
+        status.serial1.emplace(available);
+    }
+    if (m_pty_2) {
+        auto available = m_pty_2->available();
+        status.serial2.emplace(available);
+    }
+    if (m_pty_3) {
+        auto available = m_pty_3->available();
+        status.serial3.emplace(available);
+    }
+    if (m_bsp) {
+        auto available = m_bsp->available();
+        status.bsp.emplace(available);
+    }
+    if (m_plc) {
+        auto available = m_plc->available();
+        status.plc.emplace(available);
+    }
+    if (m_heartbeat) {
+        auto available = m_heartbeat->available();
+        status.heartbeat.emplace(available);
+    }
+    if (m_gpio) {
+        auto available = m_gpio->available();
+        status.gpio.emplace(available);
+    }
+
+    return status;
+}
+
 void charge_bridge::handle_ready() {
+    auto status = get_status();
+    publish_status(status);
+    utilities::print_status(status);
+}
+
+void charge_bridge::handle_tick() {
+    auto status = get_status();
+    publish_status(status);
+}
+
+void charge_bridge::publish_status(utilities::chargebridge_status const& status) {
     if (not m_config.telemetry.has_value()) {
         return;
     }
 
-    bool status = true;
+    bool result = true;
     auto publish = [this](std::string_view component, std::string_view item, bool status) {
         std::stringstream topic;
         topic << m_config.telemetry->telemetry_topic << "/" << m_config.cb_name << "/" << component << "/" << item;
@@ -290,59 +348,53 @@ void charge_bridge::handle_ready() {
         m_mqtt->publish(topic.str(), payload);
     };
 
-    {
-        auto handle = m_cb_status.handle();
-        publish("chargebridge", "connected", handle->is_connected);
-        publish("chargebridge", "discovered", not handle->discovery_pending);
-        status = not handle->discovery_pending;
-    }
+    publish("chargebridge", "connected", status.connected);
+    publish("chargebridge", "discovered", status.discovered);
+    result = result && status.discovered;
 
     auto publish_status = [publish](std::string_view component, bool status) { publish(component, "status", status); };
-    if (m_can_0_client) {
-        auto available = m_can_0_client->available();
-        status = status && available;
+
+    if (status.can0.has_value()) {
+        auto available = status.can0.value();
+        result = result && available;
         publish_status("can_0", available);
     }
-    if (m_pty_1) {
-        auto available = m_pty_1->available();
-        status = status && available;
+    if (status.serial1.has_value()) {
+        auto available = status.serial1.value();
+        result = result && available;
         publish_status("serial_1", available);
     }
-    if (m_pty_2) {
-        auto available = m_pty_2->available();
-        status = status && available;
+    if (status.serial2.has_value()) {
+        auto available = status.serial2.value();
+        result = result && available;
         publish_status("serial_2", available);
     }
-    if (m_pty_3) {
-        auto available = m_pty_3->available();
-        status = status && available;
+    if (status.serial3.has_value()) {
+        auto available = status.serial3.value();
+        result = result && available;
         publish_status("serial_3", available);
     }
-    if (m_bsp) {
-        auto available = m_bsp->available();
-        status = status && available;
+    if (status.bsp.has_value()) {
+        auto available = status.bsp.value();
+        result = result && available;
         publish_status("bsp", available);
     }
-    if (m_plc) {
-        auto available = m_plc->available();
-        status = status && available;
+    if (status.plc.has_value()) {
+        auto available = status.plc.value();
+        result = result && available;
         publish_status("plc", available);
     }
-    if (m_heartbeat) {
-        auto available = m_heartbeat->available();
-        status = status && available;
+    if (status.heartbeat.has_value()) {
+        auto available = status.heartbeat.value();
+        result = result && available;
         publish_status("heatbeat", available);
     }
-    if (m_gpio) {
-        auto available = m_gpio->available();
-        status = status && available;
+    if (status.gpio.has_value()) {
+        auto available = status.gpio.value();
+        result = result && available;
         publish_status("gpio", available);
     }
-    publish_status("chargebridge", status);
-}
-
-void charge_bridge::handle_tick() {
-    handle_ready();
+    publish_status("chargebridge", result);
 }
 
 bool charge_bridge::register_events(everest::lib::io::event::fd_event_handler& handler) {
