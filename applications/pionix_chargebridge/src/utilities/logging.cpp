@@ -41,12 +41,27 @@ std::ostream& operator<<(std::ostream& s, color c) {
     return s;
 }
 
+class null_buffer : public std::streambuf {
+public:
+    int overflow(int c) override {
+        return c;
+    }
+};
+
+inline std::ostream& null_stream() {
+    static null_buffer buffer;
+    static std::ostream stream(&buffer);
+    return stream;
+}
+
+
 std::ostream& print_error(std::string const& device, std::string const& unit, int status) {
     // clang-format off
     auto ctrl =
         status == 0 ? color::success :
         status == -1 ? color::warning:
         color::error;
+    if (status == 0 ){ return null_stream(); }
     std::cout << "[ " << ctrl << std::setw(13) << std::left << unit << color::terminal << " ] "
               << color::unit << std::setw(20) << device << color::terminal << " ";
     if(status not_eq 0){
