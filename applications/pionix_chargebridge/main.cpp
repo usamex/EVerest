@@ -78,6 +78,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signal_handler);
 
     std::vector<std::string> config_files;
+    fd_event_handler ev_handler;
     std::vector<charge_bridge_config> cb_configs;
     std::vector<std::unique_ptr<::charge_bridge::charge_bridge>> cb_handler;
 
@@ -85,8 +86,6 @@ int main(int argc, char* argv[]) {
     if (mode_of_operation == mode::error) {
         return EXIT_FAILURE;
     }
-    fd_event_handler ev_handler;
-
     std::set<std::string> cb_ids_in_use;
 
     for (auto const& elem : config_files) {
@@ -99,6 +98,7 @@ int main(int argc, char* argv[]) {
             print_charge_bridge_config(config);
             if (cb_ids_in_use.count(config.cb_name) > 0) {
                 std::cerr << "Duplicate charge_bridge::name '" << config.cb_name << "'" << std::endl;
+                g_run_application.store(false);
                 return EXIT_FAILURE;
             }
 

@@ -10,7 +10,7 @@ namespace charge_bridge::utilities {
 struct chargebridge_status {
     std::string cb_name;
     bool connected{false};
-    bool discovered{false};
+    std::optional<bool> discovered;
     std::optional<bool> can0;
     std::optional<bool> serial1;
     std::optional<bool> serial2;

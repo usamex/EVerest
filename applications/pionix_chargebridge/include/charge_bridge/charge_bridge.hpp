@@ -20,8 +20,11 @@
 #include <everest/io/tun_tap/tap_client.hpp>
 #include <everest/util/async/monitor.hpp>
 
+#include <future>
 #include <memory>
 #include <optional>
+#include <set>
+#include <thread>
 
 namespace charge_bridge {
 
@@ -56,6 +59,18 @@ struct charge_bridge_config {
     firmware_update::fw_update_config firmware;
 };
 
+enum class endpoint_intent {
+    fixed_ip,
+    any_evse_mdns,
+    any_ev_mdns,
+};
+
+struct endpoint_intent_info {
+    endpoint_intent value{endpoint_intent::fixed_ip};
+    std::set<std::string> interfaces;
+    bool excluding_interfaces{false};
+};
+
 void print_charge_bridge_config(charge_bridge_config const& config);
 
 class charge_bridge : public everest::lib::io::event::fd_event_register_interface {
@@ -77,8 +92,19 @@ public:
     void manage(everest::lib::io::event::fd_event_handler& handler, std::atomic_bool const& exit, bool force_update);
 
 private:
-    void init();
+    std::future<bool> start_internal_runtime();
+    void create_internal_runtime();
+    void cleanup_internal_runtime();
+    bool unregister_internal_runtime_events(everest::lib::io::event::fd_event_handler& handler);
+    std::future<bool> stop_internal_runtime();
     void init_discovery(discovery_device_type type, std::set<std::string> const& interfaces, bool excluding);
+    bool is_mdns_endpoint() const;
+    discovery_device_type mdns_device_type() const;
+    std::set<std::string> select_discovery_interfaces() const;
+    void start_discovery_attempt(std::set<std::string> const& interfaces);
+    void stop_discovery();
+    void set_discovery_pending(bool pending);
+    void set_discovery_pending(charge_bridge_status& status, bool pending);
     void handle_discovery(std::string const& ip);
     void handle_ready();
     void handle_tick();
@@ -106,6 +132,9 @@ private:
     everest::lib::util::monitor<charge_bridge_status> m_cb_status;
     bool m_was_connected{false};
     bool m_discovery_active{false};
+    bool m_internal_runtime_started{false};
+    std::thread m_manager;
+    endpoint_intent_info m_endpoint_intent;
 
     charge_bridge_config m_config;
     std::unique_ptr<everest::lib::io::mqtt::mqtt_client> m_mqtt;
