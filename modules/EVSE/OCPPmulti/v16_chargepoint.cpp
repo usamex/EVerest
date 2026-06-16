@@ -13,7 +13,7 @@
 #include "ocpp/v2/ocpp_enums.hpp"
 #include "ocpp/v2/ocpp_types.hpp"
 #include "ocpp/v2/types.hpp"
-#include <type_traits>
+#include <conversions_v16.hpp>
 
 namespace {
 
@@ -751,6 +751,18 @@ ocpp::v16::GetLogResponse ChargePointV16::cb_upload_logs(ocpp::v16::GetLogReques
     return convert(m_callbacks_ptr->cb_get_log_request(req));
 }
 
+void ChargePointV16::cb_variable_listener(const ocpp::v16::KeyValue& key_value) {
+    if (m_variable_listener != nullptr) {
+        ocpp::v2::Component component{};
+        ocpp::v2::Variable variable{key_value.key};
+        std::string value;
+        if (key_value.value) {
+            value = key_value.value.value();
+        }
+        m_variable_listener(component, variable, value);
+    }
+}
+
 // ----------------------------------------------------------------------------
 // setup/configuration
 
@@ -1077,30 +1089,61 @@ void ChargePointV16::on_log_status_notification(ocpp::v2::UploadLogStatusEnum st
                                                ocpp::v2::conversions::upload_log_status_enum_to_string(status));
 }
 
-void ChargePointV16::on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) {
+void ChargePointV16::on_meter_value(std::int32_t evse_id, std::optional<float> soc,
+                                    const types::powermeter::Powermeter& power_meter) {
     check_configured("on_meter_value");
+    ocpp::Measurement measurement;
+    measurement.power_meter = module::conversions_v16::to_ocpp_power_meter(power_meter);
+    if (soc) {
+        // soc is present, so add this to the measurement
+        measurement.soc_Percent = ocpp::StateOfCharge{soc.value()};
+    }
+    if (power_meter.temperatures.has_value()) {
+        measurement.temperature_C = module::conversions_v16::to_ocpp_temperatures(power_meter.temperatures.value());
+    }
+    m_charge_point->on_meter_values(evse_id, measurement);
 }
+
 void ChargePointV16::on_reservation_status(std::int32_t reservation_id, ocpp::v2::ReservationUpdateStatusEnum status) {
-    check_configured("on_reservation_status");
+    // not used in OCPP 1.6
 }
+
 void ChargePointV16::on_reservation_cleared(std::int32_t evse_id, std::int32_t connector_id) {
     check_configured("on_reservation_cleared");
+    m_charge_point->on_reservation_end(evse_id);
 }
+
 void ChargePointV16::on_reserved(std::int32_t evse_id, std::int32_t connector_id) {
     check_configured("on_reserved");
+    m_charge_point->on_reservation_start(evse_id);
 }
+
 void ChargePointV16::on_security_event(const ocpp::CiString<50>& event_type,
                                        const std::optional<ocpp::CiString<255>>& tech_info,
                                        const std::optional<bool>& critical,
                                        const std::optional<ocpp::DateTime>& timestamp) {
     check_configured("on_security_event");
+    m_charge_point->on_security_event(event_type, tech_info);
 }
-void ChargePointV16::on_session_finished(std::int32_t evse_id, std::int32_t connector_id) {
+
+void ChargePointV16::on_session_finished(std::int32_t evse_id, std::int32_t connector_id,
+                                         const types::evse_manager::SessionEvent& session_event) {
     check_configured("on_session_finished");
+    m_charge_point->on_session_stopped(evse_id, session_event.uuid);
 }
-void ChargePointV16::on_session_started(std::int32_t evse_id, std::int32_t connector_id) {
+
+void ChargePointV16::on_session_started(std::int32_t evse_id, std::int32_t connector_id,
+                                        const types::evse_manager::SessionEvent& session_event) {
     check_configured("on_session_started");
+    if (session_event.session_started) {
+        const auto& session_started = session_event.session_started.value();
+        m_charge_point->on_session_started(
+            evse_id, session_event.uuid,
+            module::conversions_v16::to_ocpp_session_started_reason(session_started.reason),
+            session_started.logging_path);
+    }
 }
+
 void ChargePointV16::on_transaction_finished(std::int32_t evse_id, const ocpp::DateTime& timestamp,
                                              const ocpp::v2::MeterValue& meter_stop, ocpp::v2::ReasonEnum reason,
                                              ocpp::v2::TriggerReasonEnum trigger_reason,
@@ -1116,14 +1159,46 @@ void ChargePointV16::on_transaction_started(
     const std::optional<std::int32_t>& reservation_id, const std::optional<std::int32_t>& remote_start_id,
     ocpp::v2::ChargingStateEnum charging_state) {
     check_configured("on_transaction_started");
-}
-void ChargePointV16::on_unavailable(std::int32_t evse_id, std::int32_t connector_id) {
-    check_configured("on_unavailable");
+
+    std::string found_token{};
+    std::string found_signed_meter_value{};
+    double found_meter_start{0.};
+
+    for (const auto& entry : meter_start.sampledValue) {
+        if (entry.measurand.value_or(ocpp::v2::MeasurandEnum::Frequency) ==
+            ocpp::v2::MeasurandEnum::Energy_Active_Import_Register) {
+            found_meter_start = entry.value;
+            if (entry.signedMeterValue) {
+                found_signed_meter_value = entry.signedMeterValue->signedMeterData;
+            }
+            break;
+        }
+    }
+
+    if (id_token) {
+        found_token = id_token->idToken;
+    }
+
+    m_charge_point->on_transaction_started(evse_id, session_id, found_token, found_meter_start, reservation_id,
+                                           timestamp, found_signed_meter_value);
 }
 
-void ChargePointV16::register_variable_listener(listener_t&& listener) {
-    check_configured("register_variable_listener");
+void ChargePointV16::on_unavailable(std::int32_t evse_id, std::int32_t connector_id) {
+    check_configured("on_unavailable");
+    m_charge_point->on_disabled(evse_id);
 }
+
+void ChargePointV16::register_variable_listener(const std::string& key, listener_t listener) {
+    check_configured("register_variable_listener");
+    if (m_variable_listener == nullptr && listener != nullptr && !key.empty()) {
+        m_variable_listener = std::move(listener);
+    }
+    if (!key.empty()) {
+        m_charge_point->register_configuration_key_changed_callback(
+            key, [this](auto&&... args) { cb_variable_listener(args...); });
+    }
+}
+
 std::map<ocpp::v2::SetVariableData, ocpp::v2::SetVariableResult>
 ChargePointV16::set_variables(const std::vector<ocpp::v2::SetVariableData>& set_variable_data_vector,
                               const std::string& source) {

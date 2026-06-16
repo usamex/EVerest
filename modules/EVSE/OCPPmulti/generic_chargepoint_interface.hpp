@@ -151,11 +151,16 @@ struct GenericChargePointInterface {
         std::unique_ptr<ocpp::v2::DeviceModelStorageInterface>&& device_model_storage_interface;
     };
 
+#if 0
     using listener_t = std::function<void(
         const std::unordered_map<std::int64_t, ocpp::v2::VariableMonitoringMeta>& monitors,
         const ocpp::v2::Component& component, const ocpp::v2::Variable& variable,
         const ocpp::v2::VariableCharacteristics& characteristics, const ocpp::v2::VariableAttribute& attribute,
         const std::string& value_previous, const std::string& value_current)>;
+#else
+    using listener_t = std::function<void(const ocpp::v2::Component& component, const ocpp::v2::Variable& variable,
+                                          const std::string& value_current)>;
+#endif
 
     virtual void init(init_args_t& args) = 0;
 
@@ -189,7 +194,8 @@ struct GenericChargePointInterface {
     on_get_15118_ev_certificate_request(std::int32_t extensions_id,
                                         const ocpp::v2::Get15118EVCertificateRequest& request) = 0;
     virtual void on_log_status_notification(ocpp::v2::UploadLogStatusEnum status, std::int32_t requestId) = 0;
-    virtual void on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) = 0;
+    virtual void on_meter_value(std::int32_t evse_id, std::optional<float> soc,
+                                const types::powermeter::Powermeter& power_meter) = 0;
     virtual void on_reservation_status(std::int32_t reservation_id, ocpp::v2::ReservationUpdateStatusEnum status) = 0;
     virtual void on_reservation_cleared(std::int32_t evse_id, std::int32_t connector_id) = 0;
     virtual void on_reserved(std::int32_t evse_id, std::int32_t connector_id) = 0;
@@ -197,8 +203,10 @@ struct GenericChargePointInterface {
                                    const std::optional<ocpp::CiString<255>>& tech_info,
                                    const std::optional<bool>& critical,
                                    const std::optional<ocpp::DateTime>& timestamp) = 0;
-    virtual void on_session_finished(std::int32_t evse_id, std::int32_t connector_id) = 0;
-    virtual void on_session_started(std::int32_t evse_id, std::int32_t connector_id) = 0;
+    virtual void on_session_finished(std::int32_t evse_id, std::int32_t connector_id,
+                                     const types::evse_manager::SessionEvent& session_event) = 0;
+    virtual void on_session_started(std::int32_t evse_id, std::int32_t connector_id,
+                                    const types::evse_manager::SessionEvent& session_event) = 0;
     virtual void on_transaction_finished(std::int32_t evse_id, const ocpp::DateTime& timestamp,
                                          const ocpp::v2::MeterValue& meter_stop, ocpp::v2::ReasonEnum reason,
                                          ocpp::v2::TriggerReasonEnum trigger_reason,
@@ -215,7 +223,7 @@ struct GenericChargePointInterface {
                                         ocpp::v2::ChargingStateEnum charging_state) = 0;
     virtual void on_unavailable(std::int32_t evse_id, std::int32_t connector_id) = 0;
 
-    virtual void register_variable_listener(listener_t&& listener) = 0;
+    virtual void register_variable_listener(const std::string& key, listener_t listener) = 0;
     virtual std::map<ocpp::v2::SetVariableData, ocpp::v2::SetVariableResult>
     set_variables(const std::vector<ocpp::v2::SetVariableData>& set_variable_data_vector,
                   const std::string& source) = 0;

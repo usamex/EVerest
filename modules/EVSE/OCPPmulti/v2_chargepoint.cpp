@@ -5,6 +5,7 @@
 #include "generic_chargepoint_interface.hpp"
 #include "ocpp/v2/ctrlr_component_variables.hpp"
 #include "ocpp/v2/ocpp_enums.hpp"
+#include <conversions.hpp>
 
 namespace {
 
@@ -104,6 +105,16 @@ std::optional<std::string> ChargePointV2::get_string(const ocpp::v2::Component& 
         res = result.value;
     }
     return res;
+}
+
+void ChargePointV2::cb_variable_listener(
+    const std::unordered_map<std::int64_t, ocpp::v2::VariableMonitoringMeta>& monitors,
+    const ocpp::v2::Component& component, const ocpp::v2::Variable& variable,
+    const ocpp::v2::VariableCharacteristics& characteristics, const ocpp::v2::VariableAttribute& attribute,
+    const std::string& value_previous, const std::string& value_current) {
+    if (m_variable_listener != nullptr) {
+        m_variable_listener(component, variable, value_current);
+    }
 }
 
 ocpp::v2::Callbacks ChargePointV2::configure_callbacks() {
@@ -327,10 +338,21 @@ void ChargePointV2::on_log_status_notification(ocpp::v2::UploadLogStatusEnum sta
     check_configured("on_log_status_notification");
     m_charge_point->on_log_status_notification(status, requestId);
 }
-void ChargePointV2::on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) {
+void ChargePointV2::on_meter_value(std::int32_t evse_id, std::optional<float> soc,
+                                   const types::powermeter::Powermeter& power_meter) {
     check_configured("on_meter_value");
+    ocpp::v2::MeterValue meter_value = module::conversions::to_ocpp_meter_value(
+        power_meter, ocpp::v2::ReadingContextEnum::Sample_Periodic, power_meter.signed_meter_value);
+    if (soc) {
+        auto sampled_soc_value = module::conversions::to_ocpp_sampled_value(
+            ocpp::v2::ReadingContextEnum::Sample_Periodic, ocpp::v2::MeasurandEnum::SoC, "Percent", std::nullopt,
+            ocpp::v2::LocationEnum::EV);
+        sampled_soc_value.value = soc.value();
+        meter_value.sampledValue.push_back(sampled_soc_value);
+    }
     m_charge_point->on_meter_value(evse_id, meter_value);
 }
+
 void ChargePointV2::on_reservation_status(std::int32_t reservation_id, ocpp::v2::ReservationUpdateStatusEnum status) {
     check_configured("on_reservation_status");
     m_charge_point->on_reservation_status(reservation_id, status);
@@ -350,11 +372,13 @@ void ChargePointV2::on_security_event(const ocpp::CiString<50>& event_type,
     check_configured("on_security_event");
     m_charge_point->on_security_event(event_type, tech_info, critical, timestamp);
 }
-void ChargePointV2::on_session_finished(std::int32_t evse_id, std::int32_t connector_id) {
+void ChargePointV2::on_session_finished(std::int32_t evse_id, std::int32_t connector_id,
+                                        const types::evse_manager::SessionEvent& session_event) {
     check_configured("on_session_finished");
     m_charge_point->on_session_finished(evse_id, connector_id);
 }
-void ChargePointV2::on_session_started(std::int32_t evse_id, std::int32_t connector_id) {
+void ChargePointV2::on_session_started(std::int32_t evse_id, std::int32_t connector_id,
+                                       const types::evse_manager::SessionEvent& session_event) {
     check_configured("on_session_started");
     m_charge_point->on_session_started(evse_id, connector_id);
 }
@@ -383,9 +407,12 @@ void ChargePointV2::on_unavailable(std::int32_t evse_id, std::int32_t connector_
     m_charge_point->on_unavailable(evse_id, connector_id);
 }
 
-void ChargePointV2::register_variable_listener(listener_t&& listener) {
+void ChargePointV2::register_variable_listener(const std::string& key, listener_t listener) {
     check_configured("register_variable_listener");
-    m_charge_point->register_variable_listener(std::move(listener));
+    if (m_variable_listener == nullptr && listener != nullptr) {
+        m_variable_listener = std::move(listener);
+        m_charge_point->register_variable_listener([this](auto&&... args) { cb_variable_listener(args...); });
+    }
 }
 std::map<ocpp::v2::SetVariableData, ocpp::v2::SetVariableResult>
 ChargePointV2::set_variables(const std::vector<ocpp::v2::SetVariableData>& set_variable_data_vector,

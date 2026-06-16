@@ -20,6 +20,7 @@
 #include <generated/interfaces/session_cost/Implementation.hpp>
 #include <generated/interfaces/system/Interface.hpp>
 
+#include "generated/types/powermeter.hpp"
 #include "generic_chargepoint.hpp"
 #include <device_model/everest_device_model_storage.hpp>
 #include <error_handling.hpp>
@@ -131,10 +132,15 @@ public:
     using MonitorList = std::set<MonitorListEntry>;
 
 private:
-    using EventQueue = std::map<
-        std::int32_t,
-        std::queue<std::variant<std::monostate, types::evse_manager::SessionEvent, Everest::error::Error,
-                                ocpp::v2::MeterValue, types::system::FirmwareUpdateStatus, types::system::LogStatus>>>;
+    struct powermeter_t {
+        std::optional<float> state_of_charge;
+        types::powermeter::Powermeter meter;
+    };
+
+    using EventQueue =
+        std::map<std::int32_t,
+                 std::queue<std::variant<std::monostate, types::evse_manager::SessionEvent, Everest::error::Error,
+                                         powermeter_t, types::system::FirmwareUpdateStatus, types::system::LogStatus>>>;
 
     std::shared_ptr<module::device_model::EverestDeviceModelStorage> m_everest_device_model_storage;
     std::unique_ptr<module::TransactionHandler> m_transaction_handler;

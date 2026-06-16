@@ -4,7 +4,6 @@
 #pragma once
 
 #include "generic_chargepoint_interface.hpp"
-#include <string_view>
 
 namespace ocpp_multi {
 
@@ -15,6 +14,7 @@ private:
     std::shared_ptr<EvseSecurity> m_evse_security;
     std::unique_ptr<ocpp::v2::ChargePoint> m_charge_point;
     ocpp_multi::GenericChargePointCallbacks* m_callbacks_ptr{nullptr};
+    listener_t m_variable_listener{nullptr};
 
     void check_configured(const std::string_view& fn);
     ocpp::v2::Callbacks configure_callbacks();
@@ -32,6 +32,12 @@ private:
     std::optional<std::string> get_string(const ocpp::v2::Component& component_id,
                                           const ocpp::v2::Variable& variable_id,
                                           ocpp::v2::AttributeEnum attribute_enum);
+
+    void cb_variable_listener(const std::unordered_map<std::int64_t, ocpp::v2::VariableMonitoringMeta>& monitors,
+                              const ocpp::v2::Component& component, const ocpp::v2::Variable& variable,
+                              const ocpp::v2::VariableCharacteristics& characteristics,
+                              const ocpp::v2::VariableAttribute& attribute, const std::string& value_previous,
+                              const std::string& value_current);
 
 public:
     explicit ChargePointV2(ocpp_multi::GenericChargePointCallbacks& callbacks, evse_securityIntf& security) :
@@ -81,15 +87,18 @@ public:
     on_get_15118_ev_certificate_request(std::int32_t extensions_id,
                                         const ocpp::v2::Get15118EVCertificateRequest& request) override;
     void on_log_status_notification(ocpp::v2::UploadLogStatusEnum status, std::int32_t requestId) override;
-    void on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) override;
+    void on_meter_value(std::int32_t evse_id, std::optional<float> soc,
+                        const types::powermeter::Powermeter& power_meter) override;
     void on_reservation_status(std::int32_t reservation_id, ocpp::v2::ReservationUpdateStatusEnum status) override;
     void on_reservation_cleared(std::int32_t evse_id, std::int32_t connector_id) override;
     void on_reserved(std::int32_t evse_id, std::int32_t connector_id) override;
     void on_security_event(const ocpp::CiString<50>& event_type, const std::optional<ocpp::CiString<255>>& tech_info,
                            const std::optional<bool>& critical,
                            const std::optional<ocpp::DateTime>& timestamp) override;
-    void on_session_finished(std::int32_t evse_id, std::int32_t connector_id) override;
-    void on_session_started(std::int32_t evse_id, std::int32_t connector_id) override;
+    void on_session_finished(std::int32_t evse_id, std::int32_t connector_id,
+                             const types::evse_manager::SessionEvent& session_event) override;
+    void on_session_started(std::int32_t evse_id, std::int32_t connector_id,
+                            const types::evse_manager::SessionEvent& session_event) override;
     void on_transaction_finished(std::int32_t evse_id, const ocpp::DateTime& timestamp,
                                  const ocpp::v2::MeterValue& meter_stop, ocpp::v2::ReasonEnum reason,
                                  ocpp::v2::TriggerReasonEnum trigger_reason,
@@ -106,7 +115,7 @@ public:
                                 ocpp::v2::ChargingStateEnum charging_state) override;
     void on_unavailable(std::int32_t evse_id, std::int32_t connector_id) override;
 
-    void register_variable_listener(listener_t&& listener) override;
+    void register_variable_listener(const std::string& key, listener_t listener) override;
     std::map<ocpp::v2::SetVariableData, ocpp::v2::SetVariableResult>
     set_variables(const std::vector<ocpp::v2::SetVariableData>& set_variable_data_vector,
                   const std::string& source) override;

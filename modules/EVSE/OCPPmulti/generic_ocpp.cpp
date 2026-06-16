@@ -493,18 +493,18 @@ void GenericOcpp::handle_monitor_variables(const std::vector<types::ocpp::Compon
     if (m_started) {
         std::lock_guard lock(m_monitor_list_mutex);
 
-        if (m_monitor_list.empty()) {
-            // register a handler
-            m_charge_point.register_variable_listener(
-                [this](auto&, const auto& component, const auto& variable, auto&, auto&, auto&,
-                       const std::string& value) { cb_variable_monitor(component, variable, value); });
-        }
+        // register_variable_listener needs to support OCPP 1.6 and 2.x
+        // for 1.6 every variable needs to be separately registered
+        // for 2.0 only a single register is required
+        // charge point implementations take care of these differences
 
         // add variables to monitor list
         for (const auto& cv : component_variables) {
             // failures to insert are likely to be the same variable being
             // requested again
             (void)m_monitor_list.emplace(to_ocpp_component(cv.component), to_ocpp_variable(cv.variable));
+            m_charge_point.register_variable_listener(cv.variable.name,
+                                                      [this](auto&&... args) { cb_variable_monitor(args...); });
         }
     } else {
         EVLOG_warning << "ChargePoint not initialized, cannot handle monitor variables command";
@@ -721,10 +721,14 @@ void GenericOcpp::ready_event_queue() {
                         m_charge_point.on_fault_cleared(evse_id, get_connector_id_from_error(error));
                     }
                 }
-            } else if (std::holds_alternative<ocpp::v2::MeterValue>(queued_event)) {
-                const auto meter_value = std::get<ocpp::v2::MeterValue>(queued_event);
+            } else if (std::holds_alternative<powermeter_t>(queued_event)) {
+                const auto meter = std::get<powermeter_t>(queued_event);
                 EVLOG_info << "Processing queued meter value for evse_id: " << evse_id;
-                m_charge_point.on_meter_value(evse_id, meter_value);
+                m_charge_point.on_meter_value(evse_id, meter.state_of_charge, meter.meter);
+                // TODO(james-ctc): is this update needed?
+                if (meter.meter.power_W) {
+                    m_everest_device_model_storage->update_power(evse_id, meter.meter.power_W->total);
+                }
             } else if (std::holds_alternative<types::system::FirmwareUpdateStatus>(queued_event)) {
                 const auto fw_update_status = std::get<types::system::FirmwareUpdateStatus>(queued_event);
                 EVLOG_info << "Processing queued firmware update status";
@@ -1181,26 +1185,23 @@ bool GenericOcpp::cb_pause_charging(std::int32_t evse_id) {
 
 void GenericOcpp::cb_powermeter(std::int32_t evse_id, const types::powermeter::Powermeter& power_meter) {
     using namespace module::conversions;
-
-    ocpp::v2::MeterValue meter_value =
-        to_ocpp_meter_value(power_meter, ocpp::v2::ReadingContextEnum::Sample_Periodic, power_meter.signed_meter_value);
-    if (m_started) {
+    powermeter_t meter;
+    meter.meter = power_meter;
+    {
         auto evse_soc_map_handle = m_evse_soc_map.handle();
         if (evse_soc_map_handle->at(evse_id).has_value()) {
-            auto sampled_soc_value =
-                to_ocpp_sampled_value(ocpp::v2::ReadingContextEnum::Sample_Periodic, ocpp::v2::MeasurandEnum::SoC,
-                                      "Percent", std::nullopt, ocpp::v2::LocationEnum::EV);
-            sampled_soc_value.value = evse_soc_map_handle->at(evse_id).value();
-            meter_value.sampledValue.push_back(sampled_soc_value);
+            meter.state_of_charge = evse_soc_map_handle->at(evse_id);
         }
-        m_charge_point.on_meter_value(evse_id, meter_value);
-        const auto total_power_active_import = ocpp::v2::utils::get_total_power_active_import(meter_value);
-        if (total_power_active_import.has_value()) {
-            m_everest_device_model_storage->update_power(evse_id, total_power_active_import.value());
+    }
+
+    if (m_started) {
+        m_charge_point.on_meter_value(evse_id, meter.state_of_charge, meter.meter);
+        if (power_meter.power_W) {
+            m_everest_device_model_storage->update_power(evse_id, power_meter.power_W->total);
         }
     } else {
         std::scoped_lock lock(m_session_event_mutex);
-        m_event_queue[evse_id].emplace(meter_value);
+        m_event_queue[evse_id].emplace(std::move(meter));
     }
 }
 
@@ -1903,7 +1904,7 @@ void GenericOcpp::process_session_finished(std::int32_t evse_id, std::int32_t co
     const auto tx_event_effect = m_transaction_handler->submit_event(evse_id, module::TxEvent::EV_DISCONNECTED);
     m_evse_evcc_id.handle()->at(evse_id) = "";
     process_tx_event_effect(evse_id, tx_event_effect, session_event);
-    m_charge_point.on_session_finished(evse_id, connector_id);
+    m_charge_point.on_session_finished(evse_id, connector_id, session_event);
     m_everest_device_model_storage->update_connected_ev_available(evse_id, false);
 }
 
@@ -1974,7 +1975,7 @@ void GenericOcpp::process_session_started(std::int32_t evse_id, std::int32_t con
         const auto tx_event_effect = m_transaction_handler->submit_event(evse_id, tx_event);
         process_tx_event_effect(evse_id, tx_event_effect, session_event);
         if (session_started.reason == types::evse_manager::StartSessionReason::EVConnected) {
-            m_charge_point.on_session_started(evse_id, connector_id);
+            m_charge_point.on_session_started(evse_id, connector_id, session_event);
         }
         if (tx_event == module::TxEvent::EV_CONNECTED) {
             m_everest_device_model_storage->update_connected_ev_available(evse_id, true);
@@ -2061,7 +2062,7 @@ void GenericOcpp::process_transaction_started(std::int32_t evse_id, std::int32_t
                 << "Could not update transaction data because no transaction data is present. This might happen "
                    "in case a TxStopPoint is already active when a TransactionStarted event occurs (e.g. "
                    "TxStopPoint is EnergyTransfer or ParkingBayOccupied)";
-            m_charge_point.on_session_started(evse_id, connector_id);
+            m_charge_point.on_session_started(evse_id, connector_id, session_event);
             auto tx_event_effect = m_transaction_handler->submit_event(evse_id, module::TxEvent::AUTHORIZED);
             process_tx_event_effect(evse_id, tx_event_effect, session_event);
             tx_event_effect = m_transaction_handler->submit_event(evse_id, module::TxEvent::EV_CONNECTED);
@@ -2095,7 +2096,7 @@ void GenericOcpp::process_transaction_started(std::int32_t evse_id, std::int32_t
                 transaction_data->trigger_reason == ocpp::v2::TriggerReasonEnum::RemoteStart) {
                 trigger_reason = ocpp::v2::TriggerReasonEnum::CablePluggedIn;
                 transaction_data->charging_state = ocpp::v2::ChargingStateEnum::EVConnected;
-                m_charge_point.on_session_started(evse_id, connector_id);
+                m_charge_point.on_session_started(evse_id, connector_id, session_event);
                 tx_event = module::TxEvent::EV_CONNECTED;
             }
 

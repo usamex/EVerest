@@ -461,9 +461,9 @@ TEST_F(GenericOcppRequiresTester, subscribePowermeter) {
 
     DateTime now{"2026-01-01T00:00:00Z"};
     DateTime now_next{"2026-01-01T00:10:00Z"};
-    types::powermeter::Powermeter power_meter;
-    power_meter.timestamp = now;
-    power_meter.energy_Wh_import = {10.};
+    types::powermeter::Powermeter power_meter_0;
+    power_meter_0.timestamp = now;
+    power_meter_0.energy_Wh_import = {10.};
     // std::string timestamp;
     // types::units::Energy energy_Wh_import;
     // std::optional<std::string> meter_id;
@@ -484,40 +484,15 @@ TEST_F(GenericOcppRequiresTester, subscribePowermeter) {
     // std::optional<types::units_signed::SignedMeterValue> signed_meter_value;
     // std::optional<std::vector<types::temperature::Temperature>> temperatures;
 
-    ocpp::v2::MeterValue expected_0;
-    expected_0.timestamp = now;
-    ocpp::v2::SampledValue sampled_0;
-    sampled_0.value = power_meter.energy_Wh_import.total;
-    sampled_0.measurand = MeasurandEnum::Energy_Active_Import_Register;
-    sampled_0.location = LocationEnum::Outlet;
-    sampled_0.unitOfMeasure = {{"Wh"}};
-    sampled_0.context = ReadingContextEnum::Sample_Periodic;
-    // std::optional<PhaseEnum> phase;
-    // std::optional<SignedMeterValue> signedMeterValue;
-    // std::optional<CustomData> customData;
+    types::powermeter::Powermeter power_meter_1;
+    power_meter_1.timestamp = now_next;
+    power_meter_1.energy_Wh_import = {30.5};
 
-    expected_0.sampledValue.push_back(sampled_0);
-    // std::vector<SampledValue> sampledValue;
-    // ocpp::DateTime timestamp;
-    // std::optional<CustomData> customData;
+    EXPECT_CALL(chargepoint, on_meter_value(1, _, power_meter_0)).Times(1);
+    EXPECT_CALL(chargepoint, on_meter_value(1, _, power_meter_1)).Times(1);
 
-    ocpp::v2::MeterValue expected_1;
-    expected_1.timestamp = now_next;
-    ocpp::v2::SampledValue sampled_1;
-    sampled_1.value = 30.5;
-    sampled_1.measurand = MeasurandEnum::Energy_Active_Import_Register;
-    sampled_1.location = LocationEnum::Outlet;
-    sampled_1.unitOfMeasure = {{"Wh"}};
-    sampled_1.context = ReadingContextEnum::Sample_Periodic;
-    expected_1.sampledValue.push_back(sampled_1);
-
-    EXPECT_CALL(chargepoint, on_meter_value(1, expected_0)).Times(1);
-    EXPECT_CALL(chargepoint, on_meter_value(1, expected_1)).Times(1);
-
-    interfaces.publish(0, "powermeter", power_meter);
-    power_meter.timestamp = now_next;
-    power_meter.energy_Wh_import = {30.5};
-    interfaces.publish(0, "powermeter", power_meter);
+    interfaces.publish(0, "powermeter", power_meter_0);
+    interfaces.publish(0, "powermeter", power_meter_1);
 }
 
 TEST_F(GenericOcppRequiresTester, subscribeSessionEvent) {

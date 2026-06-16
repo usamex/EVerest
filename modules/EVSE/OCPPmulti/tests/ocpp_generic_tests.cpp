@@ -441,7 +441,8 @@ TEST_F(GenericOcppProvidesTester, monitorVariables) {
     std::vector<ComponentVariable> req1{{{"Component1"}, {"Variable1"}}};
     std::vector<ComponentVariable> req2{{{"Component2"}, {"Variable2"}}};
 
-    EXPECT_CALL(chargepoint, register_variable_listener(_)).Times(1);
+    EXPECT_CALL(chargepoint, register_variable_listener("Variable1", _)).Times(1);
+    EXPECT_CALL(chargepoint, register_variable_listener("Variable2", _)).Times(1);
 
     EXPECT_TRUE(ocpp.get_monitor_list().empty());
     ocpp.handle_monitor_variables(req1);
@@ -683,7 +684,7 @@ TEST_F(GenericOcppProvidesTester, publishEventData) {
     EXPECT_TRUE(received.empty());
 
     // add monitor
-    EXPECT_CALL(chargepoint, register_variable_listener(_)).Times(1);
+    EXPECT_CALL(chargepoint, register_variable_listener("Variable", _)).Times(1);
     std::vector<ComponentVariable> req{{{"Component"}, {"Variable"}}};
     ocpp.handle_monitor_variables(req);
     ocpp.cb_variable_monitor(Component{"Component"}, Variable{"Variable"}, "value");

@@ -125,7 +125,8 @@ GenericChargePoint::on_get_15118_ev_certificate_request(std::int32_t extensions_
 void GenericChargePoint::on_log_status_notification(ocpp::v2::UploadLogStatusEnum status, std::int32_t requestId) {
 }
 
-void GenericChargePoint::on_meter_value(std::int32_t evse_id, const ocpp::v2::MeterValue& meter_value) {
+void GenericChargePoint::on_meter_value(std::int32_t evse_id, std::optional<float> soc,
+                                        const types::powermeter::Powermeter& power_meter) {
 }
 
 void GenericChargePoint::on_reservation_status(std::int32_t reservation_id,
@@ -144,10 +145,12 @@ void GenericChargePoint::on_security_event(const ocpp::CiString<50>& event_type,
                                            const std::optional<ocpp::DateTime>& timestamp) {
 }
 
-void GenericChargePoint::on_session_finished(std::int32_t evse_id, std::int32_t connector_id) {
+void GenericChargePoint::on_session_finished(std::int32_t evse_id, std::int32_t connector_id,
+                                             const types::evse_manager::SessionEvent& session_event) {
 }
 
-void GenericChargePoint::on_session_started(std::int32_t evse_id, std::int32_t connector_id) {
+void GenericChargePoint::on_session_started(std::int32_t evse_id, std::int32_t connector_id,
+                                            const types::evse_manager::SessionEvent& session_event) {
 }
 
 void GenericChargePoint::on_transaction_finished(std::int32_t evse_id, const ocpp::DateTime& timestamp,
@@ -169,7 +172,7 @@ void GenericChargePoint::on_transaction_started(
 void GenericChargePoint::on_unavailable(std::int32_t evse_id, std::int32_t connector_id) {
 }
 
-void GenericChargePoint::register_variable_listener(listener_t&& listener) {
+void GenericChargePoint::register_variable_listener(const std::string& key, listener_t listener) {
 }
 
 std::map<ocpp::v2::SetVariableData, ocpp::v2::SetVariableResult>
